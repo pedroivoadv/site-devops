@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout código
         uses: actions/checkout@v4
 
       - name: Configurar credenciais AWS
@@ -20,6 +20,7 @@ jobs:
           aws-region: us-east-1
 
       - name: Login no ECR
+        id: ecr-login
         uses: aws-actions/amazon-ecr-login@v2
 
       - name: Build e push imagem Docker
@@ -28,8 +29,8 @@ jobs:
           IMAGE_TAG: latest
         run: |
           docker build -t $ECR_REPOSITORY:$IMAGE_TAG .
-          docker tag $ECR_REPOSITORY:$IMAGE_TAG ${{ steps.login-ecr.outputs.registry }}/$ECR_REPOSITORY:$IMAGE_TAG
-          docker push ${{ steps.login-ecr.outputs.registry }}/$ECR_REPOSITORY:$IMAGE_TAG
+          docker tag $ECR_REPOSITORY:$IMAGE_TAG ${{ steps.ecr-login.outputs.registry }}/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push ${{ steps.ecr-login.outputs.registry }}/$ECR_REPOSITORY:$IMAGE_TAG
 
       - name: Deploy na EC2 via SSH
         uses: appleboy/ssh-action@master
@@ -38,7 +39,8 @@ jobs:
           username: ec2-user
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${{ steps.login-ecr.outputs.registry }}
-            docker pull ${{ steps.login-ecr.outputs.registry }}/${{ secrets.AWS_ECR_REPO }}:latest
-            docker rm -f $(docker ps -aq)
-            docker run -d -p 80:80 ${{ steps.login-ecr.outputs.registry }}/${{ secrets.AWS_ECR_REPO }}:latest
+            aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${{ steps.ecr-login.outputs.registry }}
+            docker pull ${{ steps.ecr-login.outputs.registry }}/${{ secrets.AWS_ECR_REPO }}:latest
+            docker stop site || true
+            docker rm site || true
+            docker run -d --restart always --name site -p 80:80 ${{ steps.ecr-login.outputs.registry }}/${{ secrets.AWS_ECR_REPO }}:latest
