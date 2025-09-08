@@ -1,0 +1,28 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Build da imagem Docker
+        run: docker build -t nome-da-imagem:latest .
+
+      - name: Rodar container para teste
+        run: |
+          docker run --rm -d -p 8080:80 --name test-container nome-da-imagem:latest
+          sleep 5
+          curl -f http://localhost:8080/ || exit 1
+          docker stop test-container
+
+      - name: Testes passaram
+        run: echo "Build e testes OK!"
